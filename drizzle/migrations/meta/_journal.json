@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793190106523,
+      "tag": "0000_staff_roles_and_demo_cloud_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793190528663,
+      "tag": "0001_bridge_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793783118789,
+      "tag": "0002_add_synthetic_rehab_reports",
+      "breakpoints": true
+    }
+  ]
+}
