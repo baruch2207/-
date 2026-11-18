@@ -16,6 +16,7 @@ import { Route as ResearchRouteImport } from './routes/research'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StationRouteImport } from './routes/station'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
+import { Route as AuthenticatedBedsideRouteImport } from './routes/_authenticated/bedside'
 import { Route as AuthenticatedLiveavatarRouteImport } from './routes/_authenticated/liveavatar'
 import { Route as AuthenticatedSimliRouteImport } from './routes/_authenticated/simli'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
@@ -56,6 +57,11 @@ const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBedsideRoute = AuthenticatedBedsideRouteImport.update({
+  id: '/bedside',
+  path: '/bedside',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLiveavatarRoute = AuthenticatedLiveavatarRouteImport.update({
   id: '/liveavatar',
   path: '/liveavatar',
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/station': typeof StationRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/bedside': typeof AuthenticatedBedsideRoute
   '/liveavatar': typeof AuthenticatedLiveavatarRoute
   '/simli': typeof AuthenticatedSimliRoute
   '/staff': typeof AuthenticatedStaffRoute
@@ -103,6 +110,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/station': typeof StationRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/bedside': typeof AuthenticatedBedsideRoute
   '/liveavatar': typeof AuthenticatedLiveavatarRoute
   '/simli': typeof AuthenticatedSimliRoute
   '/staff': typeof AuthenticatedStaffRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/station': typeof StationRoute
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
+  '/_authenticated/bedside': typeof AuthenticatedBedsideRoute
   '/_authenticated/liveavatar': typeof AuthenticatedLiveavatarRoute
   '/_authenticated/simli': typeof AuthenticatedSimliRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/station'
     | '/alerts'
+    | '/bedside'
     | '/liveavatar'
     | '/simli'
     | '/staff'
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/station'
     | '/alerts'
+    | '/bedside'
     | '/liveavatar'
     | '/simli'
     | '/staff'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/station'
     | '/_authenticated/alerts'
+    | '/_authenticated/bedside'
     | '/_authenticated/liveavatar'
     | '/_authenticated/simli'
     | '/_authenticated/staff'
@@ -229,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAlertsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/bedside': {
+      id: '/_authenticated/bedside'
+      path: '/bedside'
+      fullPath: '/bedside'
+      preLoaderRoute: typeof AuthenticatedBedsideRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/liveavatar': {
       id: '/_authenticated/liveavatar'
       path: '/liveavatar'
@@ -269,6 +288,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
+  AuthenticatedBedsideRoute: typeof AuthenticatedBedsideRoute
   AuthenticatedLiveavatarRoute: typeof AuthenticatedLiveavatarRoute
   AuthenticatedSimliRoute: typeof AuthenticatedSimliRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
@@ -276,6 +296,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
+  AuthenticatedBedsideRoute: AuthenticatedBedsideRoute,
   AuthenticatedLiveavatarRoute: AuthenticatedLiveavatarRoute,
   AuthenticatedSimliRoute: AuthenticatedSimliRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRoute,

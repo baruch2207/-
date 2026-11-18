@@ -121,10 +121,13 @@ function PatientScreen() {
               </div>
             </div>
             <p className="px-1 text-sm text-muted-foreground">
-              תמונת אורי המקורית – ללא תנועת שפתיים, ללא עלות. אווטאר וידאו חי עם שיחה קולית (Simli) זמין לבדיקת צוות בלבד – אינו מוכן למטופלים.
+              תמונת אורי המקורית – ללא תנועת שפתיים, ללא עלות. האווטאר החי עם שיחה קולית זמין במסך המיטה, שאיש צוות מכין ומוסר למטופל.
             </p>
+            <Link to="/bedside" className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-primary px-4 text-lg text-primary-foreground">
+              🛏️ מסך המיטה למטופל – אורי חי, סדר יום, התקדמות וקריאה לצוות
+            </Link>
             <Link to="/simli" className="inline-flex min-h-12 items-center justify-center rounded-2xl border-2 border-primary px-4 text-lg text-primary">
-              🎥 בדיקת אווטאר חי + שיחה קולית (צוות בלבד, בתשלום)
+              🎥 בדיקת אווטאר חי (צוות, 60 שנ׳)
             </Link>
           </div>
           <section className="flex flex-col gap-4" aria-label="הדגמת שיחה מקומית">

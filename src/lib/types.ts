@@ -43,7 +43,7 @@ export interface PatientProfile {
 
 export type AlertPriority = "critical" | "high" | "medium" | "low";
 export type AlertStatus = "open" | "acknowledged" | "resolved";
-export type SafetyCategory = "chest_pain" | "breathing" | "neuro" | "suicidality" | "abuse" | "fall" | "verification" | "distress";
+export type SafetyCategory = "chest_pain" | "breathing" | "neuro" | "suicidality" | "abuse" | "fall" | "verification" | "distress" | "help_request";
 
 export interface DemoAlert {
   id: string;

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { seedAlerts, seedPatients } from "./fixtures";
 import { emptyMemory } from "./engine";
+import type { CheckIn } from "./ward";
 import type { DemoAlert, PatientMemory, PatientProfile, StationOutcome } from "./types";
 
 // Client-only demo store. SYNTHETIC DATA ONLY – never real PHI.
@@ -10,6 +11,9 @@ export interface DemoState {
   memory: Record<string, PatientMemory>;
   outcomes: StationOutcome[];
   activePatientId: string;
+  checkIns: CheckIn[];
+  /** Bedside kiosk: a signed-in staff member handed this device to a patient. */
+  kiosk: { patientId: string; liveAvatar: boolean; startedAt: string } | null;
   settings: { rate: number; autoSpeak: boolean; staffUnlocked: boolean; useServer: boolean };
 }
 
@@ -20,6 +24,8 @@ const initial = (): DemoState => ({
   memory: {},
   outcomes: [],
   activePatientId: "p1",
+  checkIns: [],
+  kiosk: null,
   settings: { rate: 0.88, autoSpeak: true, staffUnlocked: false, useServer: false },
 });
 
@@ -60,3 +66,8 @@ export function useDemo(): DemoState {
 
 export const getMemory = (s: DemoState, id: string): PatientMemory => ({ ...emptyMemory(), ...s.memory[id] });
 export const activePatient = (s: DemoState) => s.patients.find((p) => p.id === s.activePatientId) ?? s.patients[0];
+
+/** Adds an alert locally (dedup by id). Cloud sync is done by the caller. */
+export function pushAlert(alert: DemoAlert) {
+  setState((st) => (st.alerts.some((a) => a.id === alert.id) ? st : { ...st, alerts: [alert, ...st.alerts] }));
+}

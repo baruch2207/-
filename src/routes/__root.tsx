@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
@@ -13,6 +14,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
+import { useDemo } from "@/lib/store";
 
 function NotFoundComponent() {
   return (
@@ -112,6 +114,7 @@ const navItems = [
   { to: "/", label: "מטופל" },
   { to: "/staff", label: "צוות (דמו)" },
   { to: "/alerts", label: "יומן התראות" },
+  { to: "/bedside", label: "מסך המיטה (מטופל)" },
   { to: "/station", label: "תחנת שיקום" },
   { to: "/research", label: "מחקר וראיות" },
   { to: "/settings", label: "הגדרות" },
@@ -144,6 +147,10 @@ function MainNav() {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const demo = useDemo();
+  // Bedside kiosk: the patient never sees staff navigation.
+  const kiosk = pathname === "/bedside" && demo.kiosk !== null;
 
   // React to sign-in/out once, here, so protected routes and queries refresh.
   useEffect(() => {
@@ -157,7 +164,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <MainNav />
+      {!kiosk && <MainNav />}
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
     </QueryClientProvider>

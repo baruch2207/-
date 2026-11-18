@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { createSimliSession, synthesizeSimliSpeech } from "@/lib/simli.functions";
 import { SIMLI_MAX_IDLE_SECONDS, SIMLI_MAX_SESSION_SECONDS, billableMinutes, chunkPcm, classifySimliError } from "@/lib/simliCore";
-import { serverChat } from "@/lib/serverChat";
+import { serverChat, type ServerChatResult } from "@/lib/serverChat";
 import { boundHistory, createVoiceTurn, splitSentences, type ChatTurn, type VoicePhase } from "@/lib/voiceTurn";
 import { stopSpeech } from "@/lib/speech";
 import { ORI_PHOTO } from "@/lib/avatarAdapter";
@@ -34,7 +34,22 @@ function getRecognizerCtor() {
   return (w["SpeechRecognition"] || w["webkitSpeechRecognition"]) as (new () => never) | undefined ?? null;
 }
 
-export function SimliAvatar({ patientId, canStart }: { patientId: string; canStart: boolean }) {
+export interface SimliAvatarProps {
+  patientId: string;
+  canStart: boolean;
+  /** "staff" = test page (60s, diagnostics). "patient" = bedside tablet (longer server-capped session, simple UI). */
+  variant?: "staff" | "patient";
+  /** Patient variant: billing was acknowledged by the staff member who handed over the tablet. */
+  preAcknowledged?: boolean;
+  /** Called after every answered turn, so the caller can store the conversation and any safety alert. */
+  onExchange?: (userText: string, result: ServerChatResult) => void;
+  greeting?: string;
+}
+
+export function SimliAvatar({ patientId, canStart, variant = "staff", preAcknowledged = false, onExchange, greeting = GREETING }: SimliAvatarProps) {
+  const isPatient = variant === "patient";
+  const onExchangeRef = useRef(onExchange);
+  onExchangeRef.current = onExchange;
   const mint = useServerFn(createSimliSession);
   const tts = useServerFn(synthesizeSimliSpeech);
   const [faceOn, setFaceOn] = useState(false);
@@ -51,7 +66,10 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
   const ackCache = useRef(new Map<string, { pcm: Uint8Array; seconds: number }>());
   const fs = useFullscreen<HTMLDivElement>();
   const [phase, setPhase] = useState<Phase>("idle");
-  const [ack, setAck] = useState(false);
+  const [ackState, setAck] = useState(false);
+  const ack = isPatient ? preAcknowledged : ackState;
+  const [cap, setCap] = useState(SIMLI_MAX_SESSION_SECONDS);
+  const [idleCap, setIdleCap] = useState(SIMLI_MAX_IDLE_SECONDS);
   const [videoOk, setVideoOk] = useState(false);
   const [audioOk, setAudioOk] = useState(false);
   const [err, setErr] = useState<{ title: string; detail: string } | null>(null);
@@ -75,10 +93,10 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
     if (phase !== "live" && phase !== "connecting") return;
     const id = setInterval(() => {
       if (!startedAt.current) return;
-      setLeft(Math.max(0, SIMLI_MAX_SESSION_SECONDS - Math.round((Date.now() - startedAt.current) / 1000)));
+      setLeft(Math.max(0, cap - Math.round((Date.now() - startedAt.current) / 1000)));
     }, 1000);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, cap]);
 
   const listenStartRef = useRef(0);
   const getVoice = () => {
@@ -126,12 +144,14 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
       try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach((t) => t.stop()); } catch { /* handled by recognizer */ }
     }
     try {
-      const r = await mint({ data: { acknowledgeBilling: ack } });
+      const r = await mint({ data: { acknowledgeBilling: ack, mode: isPatient ? "patient" : "test" } });
       if (!r.ok) throw new Error(r.error);
       setIsDemoFace(r.isDemoFace);
+      const maxS = r.maxSeconds ?? SIMLI_MAX_SESSION_SECONDS;
+      setCap(maxS); setIdleCap(r.idleSeconds ?? SIMLI_MAX_IDLE_SECONDS);
       setPhase("connecting");
       // Prepare Ori's opening line in parallel with the video connection.
-      const greetP = tts({ data: { text: GREETING } }).catch(() => null);
+      const greetP = tts({ data: { text: greeting } }).catch(() => null);
       const { SimliClient, LogLevel } = await import("simli-client");
       // Fresh client per session, created right before start; never reused.
       const client = new SimliClient(r.sessionToken, videoRef.current!, audioRef.current!, null, LogLevel.INFO);
@@ -142,8 +162,9 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
       client.on("silent", () => { if (allSentRef.current) voiceRef.current?.botMaybeFinished(); });
       clientRef.current = client;
       startedAt.current = Date.now();
-      setLeft(SIMLI_MAX_SESSION_SECONDS);
-      timer.current = setTimeout(() => { void stop(); }, SIMLI_MAX_SESSION_SECONDS * 1000);
+      setLeft(maxS);
+      // Client-side stop mirrors the server cap (+2s grace); the server cap is authoritative.
+      timer.current = setTimeout(() => { void stop(); }, (maxS + 2) * 1000);
       await client.start();
       setPhase("live");
       // Ori opens the conversation, then the mic opens automatically (no extra taps).
@@ -153,8 +174,8 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
         allSentRef.current = false;
         v?.botSpeaking(g.seconds);
         for (const c of chunkPcm(pcmFrom(g.pcmBase64))) client.sendAudioData(c);
-        historyRef.current = [{ role: "assistant", content: GREETING }];
-        setTranscript([{ role: "assistant", content: GREETING }]);
+        historyRef.current = [{ role: "assistant", content: greeting }];
+        setTranscript([{ role: "assistant", content: greeting }]);
         allSentRef.current = true;
         v?.enable();
         v?.botMaybeFinished();
@@ -208,6 +229,7 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
       setTiming((x) => ({ ...x, ai: Math.round(tAi - t0) }));
       historyRef.current = boundHistory([...historyRef.current, { role: "user", content: q }, { role: "assistant", content: r.reply }]);
       setTranscript((t) => [...t, { role: "assistant", content: r.reply }]);
+      try { onExchangeRef.current?.(q, r); } catch { /* caller bug must not break the session */ }
 
       // TTS: first sentence immediately; the rest start in parallel and play in order.
       const parts = splitSentences(r.reply);
@@ -273,24 +295,40 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
         </div>
       </div>
 
+      {isPatient ? (
+      <p role="status" className="text-xl">
+        {phase === "idle" && "לחצו על הכפתור כדי לדבר עם אורי."}
+        {(phase === "token" || phase === "connecting") && "אורי מתחבר… רק רגע."}
+        {phase === "live" && (voice === "listening" ? "אורי מקשיב. דברו בנחת." : voice === "speaking" || voice === "waiting-end" ? "אורי מדבר…" : voice === "thinking" ? "אורי חושב…" : "אורי כאן.")}
+        {phase === "live" && left <= 30 && ` (השיחה תסתיים בעוד ${left} שניות)`}
+        {phase === "ended" && "השיחה הסתיימה. אפשר לדבר שוב בכל רגע."}
+        {phase === "error" && "אורי לא הצליח להתחבר עכשיו. אפשר לכתוב לו למטה."}
+      </p>
+      ) : (
       <p role="status" className="text-base">
         {phase === "idle" && "לא פעיל. אין חיוב עד שלוחצים 'התחל'."}
         {phase === "token" && "שלב 1: מבקש אסימון סשן מהשרת…"}
         {phase === "connecting" && "שלב 2: פותח חיבור וידאו (WebRTC)…"}
         {phase === "live" && (verified ? "✅ וידאו ושמע התקבלו בפועל" : videoOk ? "וידאו התקבל — שמע טרם אומת (אמרו משפט)" : "מחובר — ממתין לפריים וידאו ראשון")}
         {phase === "live" && ` · נותרו ${left} שנ׳`}
-        {phase === "ended" && `הסשן הסתיים (מגבלת בדיקה: עד ${SIMLI_MAX_SESSION_SECONDS} שניות, או ${SIMLI_MAX_IDLE_SECONDS} שניות בלי דיבור). אפשר להתחיל שוב.`}
+        {phase === "ended" && `הסשן הסתיים (מגבלה: עד ${cap} שניות, או ${idleCap} שניות בלי דיבור). אפשר להתחיל שוב.`}
         {phase === "error" && "הסשן נעצר בגלל שגיאה."}
       </p>
-      {isDemoFace && active && <p className="rounded-xl bg-warning-soft p-2 text-sm">פנים לדוגמה מ־Simli — אינן תמונת אורי.</p>}
-      {err && (
+      )}
+      {isDemoFace && active && !isPatient && <p className="rounded-xl bg-warning-soft p-2 text-sm">פנים לדוגמה מ־Simli — אינן תמונת אורי.</p>}
+      {err && !isPatient && (
         <div className="rounded-xl border-2 border-destructive bg-destructive-soft p-3">
           <p className="font-bold">{err.title}</p>
           <p className="text-sm">{err.detail}</p>
         </div>
       )}
 
-      {!active ? (
+      {!active && isPatient ? (
+        <button onClick={start} disabled={!canStart || !ack || phase === "token"}
+          className="min-h-20 rounded-3xl bg-primary px-6 text-2xl font-semibold text-primary-foreground shadow-soft disabled:opacity-50">
+          {phase === "ended" || phase === "error" ? "🔄 לדבר שוב עם אורי" : "💬 לדבר עם אורי"}
+        </button>
+      ) : !active ? (
         <div className="flex flex-col gap-2">
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-1 h-5 w-5" />
@@ -304,7 +342,7 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
         </div>
       ) : (
         <button onClick={() => void stop()} className="min-h-14 rounded-2xl border-2 border-destructive px-5 text-xl font-bold">
-          ⏹ עצור הכל (קול, שמע וסשן)
+          {isPatient ? "⏹ לסיים את השיחה" : "⏹ עצור הכל (קול, שמע וסשן)"}
         </button>
       )}
 
@@ -316,10 +354,10 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
               {voice !== "off" ? "🎤 מצב שיחה קולית פעיל — לחצו לכיבוי" : "🎤 מצב שיחה קולית"}
             </button>
           ) : (
-            <p className="rounded-xl bg-warning-soft p-2 text-sm">הדפדפן לא תומך בזיהוי דיבור. אפשר להקליד. (תכנון עתידי: זיהוי דיבור בשרת לצוות בלבד.)</p>
+            <p className="rounded-xl bg-warning-soft p-2 text-sm">הדפדפן לא תומך בזיהוי דיבור. אפשר להקליד.</p>
           )}
-          <label className="flex items-center gap-2 text-base"><input type="checkbox" checked={faceOn} onChange={(e) => setFaceOn(e.target.checked)} className="h-5 w-5" />התאם את אורי להבעת הפנים (מצלמה, ניתוח במכשיר בלבד) — <span aria-live="polite">{faceStatusLabel[face.status]}</span></label>
-          <p className="text-sm text-muted-foreground">שיחה בתורות: המיקרופון נסגר בזמן שאורי מדבר ונפתח מחדש בסיומו. אי אפשר לקטוע את אורי באמצע (barge-in לא זמין).</p>
+          {!isPatient && <label className="flex items-center gap-2 text-base"><input type="checkbox" checked={faceOn} onChange={(e) => setFaceOn(e.target.checked)} className="h-5 w-5" />התאם את אורי להבעת הפנים (מצלמה, ניתוח במכשיר בלבד) — <span aria-live="polite">{faceStatusLabel[face.status]}</span></label>}
+          {!isPatient && <p className="text-sm text-muted-foreground">שיחה בתורות: המיקרופון נסגר בזמן שאורי מדבר ונפתח מחדש בסיומו. אי אפשר לקטוע את אורי באמצע (barge-in לא זמין).</p>}
 
           <ul aria-label="תמליל השיחה" className="max-h-64 space-y-2 overflow-y-auto rounded-2xl bg-card p-3">
             {transcript.length === 0 && <li className="text-muted-foreground">התמליל יופיע כאן.</li>}
@@ -336,7 +374,7 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
             <button disabled={busy} className="min-h-12 rounded-2xl bg-primary px-4 text-primary-foreground disabled:opacity-50">שלח</button>
           </form>
 
-          {timing && (
+          {timing && !isPatient && (
             <p className="text-sm text-muted-foreground" aria-label="זמני שלבים (צוות)">
               זמנים: זיהוי דיבור {timing.asr ?? "—"} מ״ש · AI {timing.ai ?? "…"} מ״ש · קול ראשון {timing.tts1 ?? "…"} מ״ש · עד שמע ראשון ל־Simli {timing.audio1 ?? "…"} מ״ש · סה״כ {timing.total ?? "…"} מ״ש
             </p>
@@ -344,7 +382,7 @@ export function SimliAvatar({ patientId, canStart }: { patientId: string; canSta
         </div>
       )}
 
-      {log.length > 0 && (
+      {log.length > 0 && !isPatient && (
         <details className="text-sm">
           <summary>יומן עלויות בדיקה (במכשיר זה)</summary>
           <ul>{log.map((l) => <li key={l.at}>{new Date(l.at).toLocaleString("he-IL")} — {l.seconds} שנ׳ (~{l.minutes} דק׳ לחיוב)</li>)}</ul>

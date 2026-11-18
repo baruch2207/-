@@ -39,7 +39,7 @@ function AlertsScreen() {
   const [fStatus, setFStatus] = useState<AlertStatus | "all">("all");
   const [fPriority, setFPriority] = useState<AlertPriority | "all">("all");
 
-  const cloudAlerts = useQuery({ queryKey: ["cloud-alerts"], queryFn: () => listCloudAlerts(), retry: false });
+  const cloudAlerts = useQuery({ queryKey: ["cloud-alerts"], queryFn: () => listCloudAlerts(), retry: false, refetchInterval: 15_000 });
   const cloudFailed = cloudAlerts.isError;
 
   useEffect(() => {

@@ -15,13 +15,39 @@ export function resolveFaceId(envFaceId: string | undefined): { faceId: string; 
   return { faceId: SIMLI_DEMO_FACE_ID, isDemoFace: true };
 }
 
-/** Token config with server-enforced cost caps (never more than 60s / 30s idle). */
-export function buildSimliTokenConfig(faceId: string) {
+/** Bedside (patient) sessions: longer conversations, still hard-capped server-side. */
+export const SIMLI_PATIENT_DEFAULT_SESSION_SECONDS = 300;
+export const SIMLI_PATIENT_DEFAULT_IDLE_SECONDS = 60;
+export const SIMLI_PATIENT_HARD_MAX_SESSION_SECONDS = 600;
+export const SIMLI_PATIENT_HARD_MAX_IDLE_SECONDS = 120;
+
+export type SimliMode = "test" | "patient";
+export interface SimliCaps { maxSessionLength: number; maxIdleTime: number }
+
+const clampInt = (raw: string | undefined, def: number, min: number, max: number) => {
+  const n = Number.parseInt(raw ?? "", 10);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+};
+
+/**
+ * Caps per mode. "test" is always 60s/30s. "patient" reads optional env overrides
+ * (SIMLI_PATIENT_MAX_SESSION_SECONDS / SIMLI_PATIENT_MAX_IDLE_SECONDS) but can never exceed the hard max.
+ */
+export function resolveSimliCaps(mode: SimliMode, env: Record<string, string | undefined> = {}): SimliCaps {
+  if (mode !== "patient") return { maxSessionLength: SIMLI_MAX_SESSION_SECONDS, maxIdleTime: SIMLI_MAX_IDLE_SECONDS };
+  return {
+    maxSessionLength: clampInt(env["SIMLI_PATIENT_MAX_SESSION_SECONDS"], SIMLI_PATIENT_DEFAULT_SESSION_SECONDS, 30, SIMLI_PATIENT_HARD_MAX_SESSION_SECONDS),
+    maxIdleTime: clampInt(env["SIMLI_PATIENT_MAX_IDLE_SECONDS"], SIMLI_PATIENT_DEFAULT_IDLE_SECONDS, 15, SIMLI_PATIENT_HARD_MAX_IDLE_SECONDS),
+  };
+}
+
+/** Token config with server-enforced cost caps (default: test caps, 60s / 30s idle). */
+export function buildSimliTokenConfig(faceId: string, caps: SimliCaps = resolveSimliCaps("test")) {
   return {
     faceId,
     handleSilence: true,
-    maxSessionLength: SIMLI_MAX_SESSION_SECONDS,
-    maxIdleTime: SIMLI_MAX_IDLE_SECONDS,
+    maxSessionLength: caps.maxSessionLength,
+    maxIdleTime: caps.maxIdleTime,
     audioInputFormat: "pcm16",
   };
 }

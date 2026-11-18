@@ -46,6 +46,7 @@ function StaffScreen() {
     queryFn: () => listCloudAlerts(),
     enabled: isStaff,
     retry: false,
+    refetchInterval: 15_000, // bedside help requests show up without a reload
   });
   const cloudFailed = cloudAlerts.isError;
 

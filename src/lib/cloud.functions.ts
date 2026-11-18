@@ -121,6 +121,37 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
     };
   });
 
+/**
+ * Adds a bedside alert (help request / check-in / safety reply) to the cloud so staff on other
+ * devices see it. RLS (migration 0003) allows this only for staff role holders and synthetic patients.
+ */
+export const recordCloudAlert = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: DemoAlert) => {
+    const ok = typeof d?.id === "string" && d.id.length <= 64 && /^p[1-6]$/.test(String(d.patientId))
+      && ["critical", "high", "medium", "low"].includes(d.priority) && typeof d.quote === "string";
+    if (!ok) throw new Error("invalid alert");
+    const cut = (v: unknown, n: number) => String(v ?? "").slice(0, n);
+    return { ...d, quote: cut(d.quote, 1000), why: cut(d.why, 500), uncertainty: cut(d.uncertainty, 500), clinicianContext: cut(d.clinicianContext, 1000) };
+  })
+  .handler(async ({ context, data }) => {
+    const { error } = await context.supabase.from("demo_alerts").insert({
+      id: data.id,
+      patient_id: data.patientId,
+      priority: data.priority,
+      category: data.category,
+      created_at: data.createdAt,
+      quote: data.quote,
+      why: data.why,
+      uncertainty: data.uncertainty,
+      clinician_context: data.clinicianContext,
+      target_role: data.targetRole,
+      status: "open",
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
 /** Records a synthetic station outcome. RLS allows this only for staff role holders. */
 export const recordCloudOutcome = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

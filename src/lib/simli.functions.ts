@@ -17,7 +17,7 @@ export const getSimliStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertStaff(context);
-    const { resolveFaceId } = await import("./simliCore");
+    const { resolveFaceId, resolveSimliCaps } = await import("./simliCore");
     const face = resolveFaceId(process.env["SIMLI_FACE_ID"]);
     return {
       apiKeyConfigured: Boolean(process.env["SIMLI_API_KEY"]),
@@ -28,13 +28,21 @@ export const getSimliStatus = createServerFn({ method: "GET" })
       asr: "browser-webspeech" as const,
       ai: "server-/api/chat" as const,
       tts: "server-gateway" as const,
+      patientCaps: resolveSimliCaps("patient", process.env),
     };
   });
 
-/** Mints ONE short-lived Simli session token (60s max, 30s idle). Billable — explicit staff action only. */
+/**
+ * Mints ONE short-lived Simli session token. Billable — explicit staff action only.
+ * mode "test": 60s / 30s idle (staff test page). mode "patient": bedside tablet that a
+ * signed-in staff member handed to a patient; capped server-side (default 300s / 60s idle, hard max 600s).
+ */
 export const createSimliSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { acknowledgeBilling: boolean }) => d)
+  .inputValidator((d: { acknowledgeBilling: boolean; mode?: "test" | "patient" }) => ({
+    acknowledgeBilling: d?.acknowledgeBilling === true,
+    mode: d?.mode === "patient" ? ("patient" as const) : ("test" as const),
+  }))
   .handler(async ({ context, data }) => {
     await assertStaff(context);
     if (data.acknowledgeBilling !== true) return { ok: false as const, error: "billing not acknowledged" };
@@ -42,12 +50,13 @@ export const createSimliSession = createServerFn({ method: "POST" })
     const apiKey = process.env["SIMLI_API_KEY"];
     if (!apiKey) return { ok: false as const, error: "api key missing (401)" };
 
-    const { resolveFaceId, buildSimliTokenConfig } = await import("./simliCore");
+    const { resolveFaceId, buildSimliTokenConfig, resolveSimliCaps } = await import("./simliCore");
     const face = resolveFaceId(process.env["SIMLI_FACE_ID"]);
+    const caps = resolveSimliCaps(data.mode, process.env);
     const res = await fetch("https://api.simli.ai/compose/token", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-simli-api-key": apiKey },
-      body: JSON.stringify(buildSimliTokenConfig(face.faceId)),
+      body: JSON.stringify(buildSimliTokenConfig(face.faceId, caps)),
     });
     if (!res.ok) {
       // Status code only; the response body may echo request details.
@@ -56,7 +65,7 @@ export const createSimliSession = createServerFn({ method: "POST" })
     }
     const json = (await res.json()) as { session_token?: string };
     if (!json.session_token) return { ok: false as const, error: "token missing in response" };
-    return { ok: true as const, sessionToken: json.session_token, isDemoFace: face.isDemoFace };
+    return { ok: true as const, sessionToken: json.session_token, isDemoFace: face.isDemoFace, maxSeconds: caps.maxSessionLength, idleSeconds: caps.maxIdleTime };
   });
 
 /** Server TTS via Lovable AI → mono 16 kHz PCM16 (base64) for Simli lip-sync. Staff only. */

@@ -8,3 +8,5 @@
 - [ ] Smoother speech + live Ori on patient screen (next, after face confirmed)
 - [ ] First real paid Simli test session (rotation done; waiting for staff to run it)
 - [x] Mobile fullscreen + ack->answer audio sequence test (mocks, no Simli)
+- [x] Bedside patient app (/bedside): live Simli Ori (patient caps 300s/60s), daily schedule, mood/pain/sleep check-in, progress, help requests to staff
+- [ ] Apply migration 0003 (bedside alert insert) in Lovable Cloud
